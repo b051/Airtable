@@ -47,6 +47,7 @@ extension AirtableData {
 	public var id: String? {
 		return json["id"].string
 	}
+
 	public var createdTime: NSDate {
 		let formatter = NSDateFormatter()
 		formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSZZZZ"
@@ -69,22 +70,16 @@ extension AirtableData {
 
 	public static func List(view: String? = nil, limit: Int? = nil, offset: String? = nil, closure: ([Self], ErrorType?) -> ()) {
 		let key = "\(self).list"
-		if let this = self as? Cache.Type, let list = loadJSON(key, expireAfter: this.expireAfter)?.array {
+		if let this = self as? Cache.Type, let list = loadJSON(key, expireAfter: this.expireAfter)?.array where list.count > 0 {
 			let objects = list.map { this.load($0.string!) as! Self }
 			closure(objects, nil)
 			return
 		}
 
 		var param: [String: AnyObject] = [:]
-		if let limit = limit {
-			param["limit"] = limit
-		}
-		if let offset = offset {
-			param["offset"] = offset
-		}
-		if let view = view {
-			param["view"] = view
-		}
+		param["limit"] = limit
+		param["offset"] = offset
+		param["view"] = view
 		return Airtable.Get(table, param).response { (objects: [Self], error) in
 			if let _ = self as? Cache.Type where error == nil {
 				let keys = objects.map { $0.id! }
