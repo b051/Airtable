@@ -15,7 +15,6 @@ public protocol AirtableData: Equatable {
 	var id: String? { get }
 	var createdTime: NSDate { get }
 	init()
-	static func List(view: String?, limit: Int?, offset: String?) -> Airtable
 	static func Get(id: String) -> Airtable
 	static func Create(fields: [String: AnyObject]) -> Airtable
 }
@@ -24,7 +23,6 @@ public func ==<T: AirtableData>(lhs: T, rhs: T) -> Bool {
 }
 
 extension AirtableData {
-	static var keyPath: String { return "records" }
 	func setupFields() {
 		let fields = json["fields"]
 		let mirror = Mirror(reflecting: self)
@@ -54,21 +52,7 @@ extension AirtableData {
 		return formatter.dateFromString(json["createdTime"].string!)!
 	}
 
-	public static func List(view: String? = nil, limit: Int? = nil, offset: String? = nil) -> Airtable {
-		var param: [String: AnyObject] = [:]
-		if let limit = limit {
-			param["limit"] = limit
-		}
-		if let offset = offset {
-			param["offset"] = offset
-		}
-		if let view = view {
-			param["view"] = view
-		}
-		return Airtable.Get(table, param)
-	}
-
-	public static func List(view: String? = nil, limit: Int? = nil, offset: String? = nil, closure: ([Self], ErrorType?) -> ()) {
+	public static func List(view: String? = nil, closure: ([Self], ErrorType?) -> ()) {
 		let key = "\(self).list"
 		if let this = self as? Cache.Type, let list = loadJSON(key, expireAfter: this.expireAfter)?.array where list.count > 0 {
 			let objects = list.map { this.load($0.string!) as! Self }
@@ -76,17 +60,30 @@ extension AirtableData {
 			return
 		}
 
-		var param: [String: AnyObject] = [:]
-		param["limit"] = limit
-		param["offset"] = offset
-		param["view"] = view
-		return Airtable.Get(table, param).response { (objects: [Self], error) in
-			if let _ = self as? Cache.Type where error == nil {
-				let keys = objects.map { $0.id! }
-				saveJSON(JSON(keys), toPath: key)
+		var offset: String? = nil
+		var collection: [Self] = []
+		var _paging: (() -> ())? = { _ in }
+		let paging: () -> () = {
+			var param: [String: AnyObject] = [:]
+			param["offset"] = offset
+			param["view"] = view
+			Airtable.Get(table, param).response { (objects: [Self], _offset, error) -> () in
+				collection.appendContentsOf(objects)
+				if let _offset = _offset where objects.count == 100 {
+					offset = _offset
+					_paging?()
+				} else {
+					_paging = nil
+					if let _ = self as? Cache.Type where error == nil {
+						let keys = collection.map { $0.id! }
+						saveJSON(JSON(keys), toPath: key)
+					}
+					closure(collection, error)
+				}
 			}
-			closure(objects, error)
 		}
+		_paging = paging
+		paging()
 	}
 
 	public static func Get(id: String) -> Airtable {
@@ -330,9 +327,9 @@ public enum Airtable: URLRequestConvertible {
 		}
 	}
 
-	public func response<T: AirtableData>(closure: ([T], ErrorType?) -> ()) {
+	public func response<T: AirtableData>(closure: ([T], String?, ErrorType?) -> ()) {
 		request(self).response { json, error in
-			closure(json?["records"].array?.map { T(json: $0) } ?? [], error)
+			closure(json?["records"].array?.map { T(json: $0) } ?? [], json?["offset"].string, error)
 		}
 	}
 }
