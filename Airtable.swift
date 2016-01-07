@@ -170,7 +170,7 @@ public protocol AnyField {
 }
 
 public class Relationship<T: AirtableData>: AnyField {
-	private var raw: [String]?
+	public private(set) var raw: [String]?
 	private let key: String
 	public required init(_ key: String) {
 		self.key = key
@@ -184,6 +184,11 @@ public class Relationship<T: AirtableData>: AnyField {
 
 	public func hasKey(key: String) -> Bool {
 		return raw?.contains(key) ?? false
+	}
+
+	public func getFirst(closure: (T?, ErrorType?) -> ()) {
+		guard let id = raw?.first else { closure(nil, nil); return }
+		T.Get(id, closure: closure)
 	}
 
 	public func get(closure: ([T], ErrorType?) -> ()) {

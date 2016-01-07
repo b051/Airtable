@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = "Airtable"
-  s.version          = "1.0.2"
+  s.version          = "1.0.3"
   s.summary          = "Connector for Airtable"
   s.description      = <<-DESC
   Defines your model as:
